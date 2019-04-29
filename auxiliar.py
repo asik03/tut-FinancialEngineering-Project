@@ -13,6 +13,8 @@
 # Load the required libraries.
 import numpy as np
 import pandas as pd
+import scipy.linalg
+
 from functools import reduce
 
 # - PARAMETERS - #
@@ -26,9 +28,9 @@ hsi_path = "./data/HSI-index.csv"
 spx_path = "./data/SPX-index.csv"
 sx5e_path = "./data/SX5E-index.csv"
 
+n_simulations = 500000
 # Free risk interest rate
 r = 0.05
-
 # Volatility
 volatility = 0.05
 # Minimum supplemental amount
@@ -40,11 +42,11 @@ index_values = [[]]
 # Basket values of the 20 epochs. Array if 1 dimension with the values of the basket according to the index prices.
 basket_values = []
 # multiplier
-#m = (33.33/index_values[0][1], 33.3/index_values[0][2], 33.3/index_values[0][3])
+# m = (33.33/index_values[0][1], 33.3/index_values[0][2], 33.3/index_values[0][3])
 # Basket closing value at t20
-basket_closing_value = sum(basket_values)/20
+basket_closing_value = sum(basket_values) / 20
 # Average basket percent change
-basket_change = (basket_closing_value - basket_initial_value)/basket_initial_value
+basket_change = (basket_closing_value - basket_initial_value) / basket_initial_value
 # Supplemental amount
 S = max(1000 * basket_change, Sm)
 # Payment at maturity
@@ -55,20 +57,21 @@ basket_weights = (SPX_weight, SX5E_weight, HSI_weight)
 
 # - METHODS - #
 
-# Function that calculates the estimated volatility of the historical data of the indexes.
 def calculate_estimated_volatility(closing_price):
+    """Function that calculates the estimated volatility of the historical data of the indexes."""
     # Calculate the sequential difference between each consecutive index, after the log calculation of every element
     # of the array.
     log_returns = np.diff(np.log(closing_price), axis=0)
 
     # Volatility calculation
-    est_vol = (np.std(log_returns)) / np.sqrt(1/252)
+    est_vol = (np.std(log_returns)) / np.sqrt(1 / 252)
 
     return est_vol
 
 
-# Function to check if the total basket weights are correct.
+#
 def check_basket_weights(weights):
+    """Function to check if the total basket weights are correct."""
     if sum(weights) == 1.0:
         print("Basket ok")
     else:
@@ -76,14 +79,13 @@ def check_basket_weights(weights):
 
 
 def get_basket_value(time):
-    return m[0]*index_values[time][0] + m[1]*index_values[time][1] + m[2]*index_values[time][2]
+    return m[0] * index_values[time][0] + m[1] * index_values[time][1] + m[2] * index_values[time][2]
 
 
-# Function that load the csv data and drops the columns that are not necessary to use (Open, High and Low).
 def read_closed_values(path):
+    """Function that load the csv data and drops the columns that are not necessary to use (Open, High and Low)."""
     data = pd.read_csv(path)
     data = data.drop(data.columns[[1, 2, 3]], axis=1)
-    #close_values = data.iloc[:, [0, 4]].values
     return data
 
 
@@ -98,11 +100,11 @@ print(spx_close)
 print(str(hsi_close.size) + " close values available of index HSI.")
 print(str(spx_close.size) + " close values available of index SPX.")
 print(str(sx5e_close.size) + " close values available of index SX5E.")
-print("---------------")
 
 # As the total number of values are not equal, we have to take only the values that in the three indexes has the same
 # day at the same time. The intersection f the three values are done as a inner join operation. Columns are renamed for
 # better understanding.
+print("---------------")
 intersect_aux_df = pd.merge(hsi_close, spx_close, on='Date', how='inner')
 intersection_df = pd.merge(intersect_aux_df, sx5e_close, on='Date', how='inner')
 intersection_df.columns = ['Date', 'HSI_Close', 'SPX_Close', 'SX5E_Close']
@@ -112,10 +114,6 @@ hsi_close = intersection_df.iloc[:, [1]].values
 spx_close = intersection_df.iloc[:, [2]].values
 sx5e_close = intersection_df.iloc[:, [3]].values
 
-#historical_data = intersection_df.values.transpose()
-#print(historical_data.shape)
-
-
 HSI_volatility = calculate_estimated_volatility(hsi_close)
 SPX_volatility = calculate_estimated_volatility(spx_close)
 SX5E_volatility = calculate_estimated_volatility(sx5e_close)
@@ -123,3 +121,19 @@ SX5E_volatility = calculate_estimated_volatility(sx5e_close)
 print("Volatility of historical data od index HSI: " + str(HSI_volatility))
 print("Volatility of historical data od index SPX: " + str(SPX_volatility))
 print("Volatility of historical data od index SX5E: " + str(SX5E_volatility))
+
+# Matrix of correlation of the log-returns of historical prices
+close_matrix = np.concatenate(
+    (np.diff(np.log(hsi_close), axis=0), np.diff(np.log(spx_close), axis=0), np.diff(np.log(sx5e_close), axis=0)),
+    axis=1)
+R = np.absolute(np.corrcoef(close_matrix.T))
+print(R)
+print("Correlation matrix of shape " + str(R.shape))
+
+# Generating three random draws under the correlation matrix. Vector of correlated random numbers of the three indexes.
+epsilon = np.matmul(np.sqrt(R), np.random.randn(R.shape[0], 1))
+print(np.sqrt(R))
+print(".")
+print(np.random.randn(R.shape[0], 1))
+print(epsilon)
+print(epsilon.shape)
