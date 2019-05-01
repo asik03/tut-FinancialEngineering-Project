@@ -13,7 +13,7 @@
 # Load the required libraries.
 import numpy as np
 import pandas as pd
-import scipy.linalg
+import matplotlib.pyplot as plt
 
 from functools import reduce
 
@@ -28,9 +28,11 @@ hsi_path = "./data/HSI-index.csv"
 spx_path = "./data/SPX-index.csv"
 sx5e_path = "./data/SX5E-index.csv"
 
+# Number of simulations for the testing
 n_simulations = 500000
+
 # Free risk interest rate
-r = 0.05
+risk_rate = 0.05
 # Volatility
 volatility = 0.05
 # Minimum supplemental amount
@@ -38,19 +40,7 @@ Sm = 70
 # Basket initial value at t0
 basket_initial_value = 100
 # Index values. The array has two dimensions: time from 0 to 19, and the three indexes values depending on the datetime.
-index_values = [[]]
-# Basket values of the 20 epochs. Array if 1 dimension with the values of the basket according to the index prices.
-basket_values = []
-# multiplier
-# m = (33.33/index_values[0][1], 33.3/index_values[0][2], 33.3/index_values[0][3])
-# Basket closing value at t20
-basket_closing_value = sum(basket_values) / 20
-# Average basket percent change
-basket_change = (basket_closing_value - basket_initial_value) / basket_initial_value
-# Supplemental amount
-S = max(1000 * basket_change, Sm)
-# Payment at maturity
-P = 1000 + S
+index_values = []
 
 basket_weights = (SPX_weight, SX5E_weight, HSI_weight)
 
@@ -78,10 +68,6 @@ def check_basket_weights(weights):
         print("Basket weights are not correct")
 
 
-def get_basket_value(time):
-    return m[0] * index_values[time][0] + m[1] * index_values[time][1] + m[2] * index_values[time][2]
-
-
 def read_closed_values(path):
     """Function that load the csv data and drops the columns that are not necessary to use (Open, High and Low)."""
     data = pd.read_csv(path)
@@ -104,7 +90,7 @@ print(str(sx5e_close.size) + " close values available of index SX5E.")
 # As the total number of values are not equal, we have to take only the values that in the three indexes has the same
 # day at the same time. The intersection f the three values are done as a inner join operation. Columns are renamed for
 # better understanding.
-print("---------------")
+print("----------------------")
 intersect_aux_df = pd.merge(hsi_close, spx_close, on='Date', how='inner')
 intersection_df = pd.merge(intersect_aux_df, sx5e_close, on='Date', how='inner')
 intersection_df.columns = ['Date', 'HSI_Close', 'SPX_Close', 'SX5E_Close']
@@ -118,6 +104,9 @@ HSI_volatility = calculate_estimated_volatility(hsi_close)
 SPX_volatility = calculate_estimated_volatility(spx_close)
 SX5E_volatility = calculate_estimated_volatility(sx5e_close)
 
+# Array with the three volatilises of the index
+sig = np.array([HSI_volatility, SPX_volatility, SX5E_volatility])
+print(sig)
 print("Volatility of historical data od index HSI: " + str(HSI_volatility))
 print("Volatility of historical data od index SPX: " + str(SPX_volatility))
 print("Volatility of historical data od index SX5E: " + str(SX5E_volatility))
@@ -127,13 +116,61 @@ close_matrix = np.concatenate(
     (np.diff(np.log(hsi_close), axis=0), np.diff(np.log(spx_close), axis=0), np.diff(np.log(sx5e_close), axis=0)),
     axis=1)
 R = np.absolute(np.corrcoef(close_matrix.T))
+
+print("------------------------------------------")
+print("Correlation matrix of shape " + str(R.shape) + ":")
 print(R)
-print("Correlation matrix of shape " + str(R.shape))
 
 # Generating three random draws under the correlation matrix. Vector of correlated random numbers of the three indexes.
-epsilon = np.matmul(np.sqrt(R), np.random.randn(R.shape[0], 1))
-print(np.sqrt(R))
-print(".")
-print(np.random.randn(R.shape[0], 1))
+# Note: each column is a drawing sample
+epsilon = np.matmul(np.sqrt(R), np.random.randn(R.shape[0], 1)) #todo: n_simulations
+
+print("Epsilon: (shape: " + str(epsilon.shape) + ")")
 print(epsilon)
-print(epsilon.shape)
+
+# Getting the initial prices
+index_values.append(np.concatenate(np.array([hsi_close[0], spx_close[0], sx5e_close[0]])))
+print(index_values)
+
+# multiplier
+m = [33.33/index_values[0][0], 33.3/index_values[0][1], 33.3/index_values[0][2]]
+
+# Time passed between the observation dates, used to calculate the end_prices of every step.
+times_between_dates = [92, 90, 91, 92, 91, 91, 92, 92, 89, 92, 93, 91, 89, 92, 92, 94, 87, 92, 94, 91]
+
+# Basket values of the 20 epochs. Array if 1 dimension with the values of the basket according to the index prices.
+basket_values = []
+
+
+def end_price(days_dif, curr_spot_price):
+    """Function that returns the end prices between a phase or period."""
+    w = epsilon * np.sqrt(days_dif/365)
+    return curr_spot_price * np.exp((risk_rate - 0.5 * sig**2) * (days_dif/365) + np.dot(sig, w))
+
+
+def get_basket_value(time, ind_values):
+    """Calculate the values of the basket on a specific time"""
+    return m[0] * index_values[time][0] + m[1] * index_values[time][1] + m[2] * index_values[time][2]
+
+
+for i in range(len(times_between_dates)):
+    index_values.append(end_price(days_dif=times_between_dates[i], curr_spot_price=index_values[i]))
+    basket_values.append(get_basket_value(i+1, ind_values=index_values))  # Add +1 to the i in order to ignore the T0
+
+
+print(len(index_values))
+print(index_values)
+print(basket_values)
+
+
+
+# Basket closing value at t20
+basket_closing_value = sum(basket_values) / 20
+# Average basket percent change
+basket_change = (basket_closing_value - basket_initial_value) / basket_initial_value
+# Supplemental amount
+S = max(1000 * basket_change, Sm)
+# Payment at maturity
+P = 1000 + S
+
+
