@@ -121,12 +121,6 @@ print("------------------------------------------")
 print("Correlation matrix of shape " + str(R.shape) + ":")
 print(R)
 
-# Generating three random draws under the correlation matrix. Vector of correlated random numbers of the three indexes.
-# Note: each column is a drawing sample
-epsilon = np.matmul(np.sqrt(R), np.random.randn(R.shape[0], 1)) #todo: n_simulations
-
-print("Epsilon: (shape: " + str(epsilon.shape) + ")")
-print(epsilon)
 
 # Getting the initial prices
 index_values.append(np.concatenate(np.array([hsi_close[0], spx_close[0], sx5e_close[0]])))
@@ -144,17 +138,28 @@ basket_values = []
 
 def end_price(days_dif, curr_spot_price):
     """Function that returns the end prices between a phase or period."""
-    w = epsilon * np.sqrt(days_dif/365)
-    return curr_spot_price * np.exp((risk_rate - 0.5 * sig**2) * (days_dif/365) + np.dot(sig, w))
+
+    # Generating three random draws under the correlation matrix for each time period. Vector of correlated random
+    # numbers of the three indexes.
+    epsilon = np.matmul(np.sqrt(R), np.random.randn(R.shape[0], 1))  # todo: n_simulations
+    print("Epsilon: (shape: " + str(epsilon.shape) + ")")
+    print(epsilon)
+
+    w = epsilon.T * np.sqrt(days_dif/365)
+    print("W:")
+    print(w)
+    return np.squeeze(curr_spot_price * np.exp((risk_rate - 0.5 * sig**2) * (days_dif/365) + sig * w))
 
 
 def get_basket_value(time, ind_values):
     """Calculate the values of the basket on a specific time"""
-    return m[0] * index_values[time][0] + m[1] * index_values[time][1] + m[2] * index_values[time][2]
+    return m[0] * ind_values[time][0] + m[1] * ind_values[time][1] + m[2] * ind_values[time][2]
 
 
 for i in range(len(times_between_dates)):
     index_values.append(end_price(days_dif=times_between_dates[i], curr_spot_price=index_values[i]))
+    print("index values")
+    print(index_values[i+1])
     basket_values.append(get_basket_value(i+1, ind_values=index_values))  # Add +1 to the i in order to ignore the T0
 
 
@@ -166,11 +171,13 @@ print(basket_values)
 
 # Basket closing value at t20
 basket_closing_value = sum(basket_values) / 20
-# Average basket percent change
+# Average basket percent change (% per 1)
 basket_change = (basket_closing_value - basket_initial_value) / basket_initial_value
 # Supplemental amount
 S = max(1000 * basket_change, Sm)
 # Payment at maturity
 P = 1000 + S
+
+
 
 
