@@ -38,6 +38,9 @@ risk_rate = np.array([0.0225, 0.0225, 0.0225])
 volatility = np.array([0.05, 0.05, 0.3])
 # Use locked volatility if we want to specify the volatility by ourselves rather then obtaining from historical data.
 locked_volatility = False
+# Cap to set if we want to discard payoff values higher than 1300
+set_cap = False
+cap_value = 1300
 # Minimum supplemental amount
 Sm = 70
 # Basket initial value at t0
@@ -225,13 +228,18 @@ for n in range(n_simulations):
     # Payment at maturity
     P = 1000 + S
 
-    #int("Payment at maturity: " + str(P))
+    # Setting a cap with values more than 1300
+    if set_cap:
+        if P > cap_value:
+            P = cap_value
+
+    #print("Payment at maturity: " + str(P))
     #print(br)
 
     payoffs = np.append(payoffs, P)
 
 print("Simulation finished. Payoffs of the simulation:")
-print(payoffs)
+#print(payoffs)
 
 # Calculate the payoffs mean in order to compare the results when changing the parameters.
 payoffs_mean = np.mean(payoffs)
@@ -241,11 +249,87 @@ print(np.mean(payoffs_mean))
 plt.plot(payoffs)
 plt.show()
 
+quantile_0025 = np.quantile(payoffs, 0.025)
+quantile_05 = np.quantile(payoffs, 0.5)
+quantile_095 = np.quantile(payoffs, 0.95)
+print("Quantiles:")
+print("Quantil 0.025: " + str(quantile_0025))
+print("Quantil 0.5: " + str(quantile_05))
+print("Quantil 0.95: " + str(quantile_095))
+
+
 # - ANALYSIS AND RESULTS - #
-# 1.-
+# -- 1 --
 # By having a 2.225% of risk interest rate and volatility of the historical data, 500000 simulations and 5 years
-# of historical data, we get an average Payoff of $1206.913. If we change the total historical data collected to 3 year,
-# the average Payoff of all simulations is
+# of historical data, we get an average Payoff of $1206.913.
+# If we change the total historical data (years_of_hist_data)
+# collected to 3 years, the average Payoff of all simulations is 1178.
+# If we change the total years to 1, we get an average Payoff of 1212.15.
+# The number of years only determines the volatility in this case, so the volatility can vary and alter the expected
+# values of the simulation. It depends on the success in the past, but the more data we collect, the more possibilities
+# we have to reach a better estimation.
+
+# -- 2 --
+# Quantiles are specified in the last lines of code, printed by the simulation. Q0.025 and Q0.5 are both 1070 in the
+# three cases of 1, 3 and 5 years of historical data. The Q0.95 vary between the years.
+
+# -- 3 --
+# SX5E is the index with the highest volatility (0.1840343888758252).
+#
+# CASE 1: we set to 0 the weight of SX5E index, and 50% the other two. The final payoff average we get is
+# 1206.06. Compared with the average payoff of the previous weights, 1208.54, now the payoff is quite lower. This is
+# caused because of the lower total volatility obtained, that generates less high and low values, in which the lower
+# values are covered by the minimum supplemental amount. That means that only the higher values are counted in the
+# averaging payoff.
+#
+# CASE 2: if we set to 1 the SPX weight, and 0 the rest of them, we get the averaging payoff as 1205.94. The volatility
+# is 0.13, the lowest, also the lowest payoff as it is explained in the previous comment.
+
+# -- 4 -- Free risk and volatility rates
+# PART 1: Different free risk rates
+# By changing the free risk rate from all 0.0225 to 0.005, 0.005, and 0.3 each, and resetting the weights to 33.33%
+# each, we get an averaging payoff of 1566.44, much more bigger than the rest of the payoffs. That is caused because of
+# high risk rate it exist in one of the three indexes, even if the both remaining 2 indexes have been decreased their
+# values. A risk rate of 0.3 (30%) is hugh. Quantiles also has varied, 1438 and 2563 as the 0.5 and 0.95 ones, and 1070
+# the 0.025.
+#
+# PART 2: Different volatility values
+# Fist of all we set the flag "locked_volatility" to True to allow manually to set the volatilities and not get them
+# from the historical data. Then we change the values in the "volatility" variable to  0.05, 0.05, and 0.3. We set the
+# risk rates again to 0.0225. After running it, the result we get is an average payoff of 1195.75, the lowest value at
+# the moment. Because of the lower values of the two first indexes, the average payoff tends to be lower as there are
+# not as many high and low values than before, where the high values are only taken (values less than 1070 are not
+# considered).
+
+# -- 5 --
+# To set a cap in the value of 1300, we just need to change the flag "set_cap" to True, and check if the cap_value is
+# set to 1300. Then, all the expected payoffs that has a value more than 1300 are considered as 1300. Then, the average
+# payoff of the simulation is, compared with the 1208.54 we obtained in default conditions (part 1), of 1146.05, much
+# lower. The most different result is the 0.95 quantile, of 1300 as id the maximum value of the results. This means that
+# more than 5% of the total values are 1300.
+
+# -- 6 --
+# To calculate the value of the contract on 25 of march, we need to use the volatilities of the historical data, as the
+# initial day is before that date, and then we need to set as the time in the Black Scholes formula as the difference
+# of day between 25 of February and 25 of march, which is 28 days. By loading codes from 1 to 188, and loading the code
+# inside the simulation for loop as only the fist iteration, until line 220, and loading the end_price function with as
+# index_values.append(end_price(days_dif=28, curr_spot_price=index_values[0])), and the line
+# basket_values.append(get_basket_value(1, ind_values=index_values)), anf finally loading the code from lines 226 to
+# 246, we get the value of the contract as 1070.
+
+# --- 8: CONCLUSION ---
+# Based on the results obtained along the project work, there are many options to choose depending on the different
+# parameters that exists in the contract, firstly, the risk rate is one of the most relevant parameters we need to
+# consider in order to get beneficial results in the contract. One low variation will get vary different reslults.
+# It is also important to say that calculating an optimal
+# parameter or minimum risk value rate would be better for helping to get a better decision. Volatilities are also
+# important to consider, as the higher they are, the higher profits are gotten. Moreover, if the risk rates and
+# volatilities are high, banks would not see a good opportunity in this contract, so they would not accept it. To avoid
+# it, the selection of a specified cap in case the payoffs are higher that excepted would make banks more open to close
+# the contract. Overall, the implementation of this code has given the opportunity to learn and understand the basics
+# of the stock value forecasting and prediction, and the possible changes it can be produced when we have a lack of
+# sufficient data (changing between 1, 3 and 5 years of historical data), changes in volatilities and changes in risk
+# free interest rates.
 
 
 
